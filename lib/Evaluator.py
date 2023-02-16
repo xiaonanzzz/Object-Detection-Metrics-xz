@@ -94,6 +94,8 @@ class Evaluator:
             dects = sorted(dects, key=lambda conf: conf[2], reverse=True)
             TP = np.zeros(len(dects))
             FP = np.zeros(len(dects))
+            thresholds = np.zeros(len(dects))
+
             # create dictionary with amount of gts for each image
             det = {key: np.zeros(len(gts[key])) for key in gts}
 
@@ -123,6 +125,7 @@ class Evaluator:
                 else:
                     FP[d] = 1  # count as false positive
                     # print("FP")
+                thresholds[d] = dects[d][2]
             # compute precision, recall and average precision
             acc_FP = np.cumsum(FP)
             acc_TP = np.cumsum(TP)
@@ -133,17 +136,27 @@ class Evaluator:
                 [ap, mpre, mrec, ii] = Evaluator.CalculateAveragePrecision(rec, prec)
             else:
                 [ap, mpre, mrec, _] = Evaluator.ElevenPointInterpolatedAP(rec, prec)
+
+            f1 = 2 * prec * rec / (prec + rec)
             # add class result in the dictionary to be returned
+            best_f1_i = np.argmax(f1)
+
             r = {
                 'class': c,
                 'precision': prec,
                 'recall': rec,
+                'f1': f1,
                 'AP': ap,
                 'interpolated precision': mpre,
                 'interpolated recall': mrec,
                 'total positives': npos,
                 'total TP': np.sum(TP),
-                'total FP': np.sum(FP)
+                'total FP': np.sum(FP),
+                'thresholds': thresholds,
+                'best_f1': f1[best_f1_i],
+                'best_threshold': thresholds[best_f1_i], 
+                'best_precision': prec[best_f1_i],
+                'best_recall': rec[best_f1_i]
             }
             ret.append(r)
         return ret

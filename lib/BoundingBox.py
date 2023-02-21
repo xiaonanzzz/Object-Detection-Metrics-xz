@@ -13,7 +13,8 @@ class BoundingBox:
                  imgSize=None,
                  bbType=BBType.GroundTruth,
                  classConfidence=None,
-                 format=BBFormat.XYWH):
+                 format=BBFormat.XYWH,
+                 image_path=None):
         """Constructor.
         Args:
             imageName: String representing the image name.
@@ -51,6 +52,7 @@ class BoundingBox:
         self._bbType = bbType
         self._classId = classId
         self._format = format
+        self._image_path = image_path
 
         # If relative coordinates, convert to absolute values
         # For relative coords: (x,y,w,h)=(X_center/img_width , Y_center/img_height)

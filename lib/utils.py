@@ -90,7 +90,7 @@ def convertToAbsoluteValues(size, box):
     return (xIn, yIn, xEnd, yEnd)
 
 
-def add_bb_into_image(image, bb, color=(255, 0, 0), thickness=2, label=None):
+def add_bbox_to_image(image, x1, y1, x2, y2, color=(255, 0, 0), thickness=2, label=None, ):
     r = int(color[0])
     g = int(color[1])
     b = int(color[2])
@@ -99,7 +99,6 @@ def add_bb_into_image(image, bb, color=(255, 0, 0), thickness=2, label=None):
     fontScale = 0.5
     fontThickness = 1
 
-    x1, y1, x2, y2 = bb.getAbsoluteBoundingBox(BBFormat.XYX2Y2)
     x1 = int(x1)
     y1 = int(y1)
     x2 = int(x2)
@@ -122,4 +121,19 @@ def add_bb_into_image(image, bb, color=(255, 0, 0), thickness=2, label=None):
                       -1)
         cv2.putText(image, label, (xin_bb, yin_bb), font, fontScale, (0, 0, 0), fontThickness,
                     cv2.LINE_AA)
+    return image
+
+
+def add_bb_into_image(image, bb, color=(255, 0, 0), thickness=2, label=None, save_image=None):
+
+    if isinstance(image, str):
+        image = cv2.imread(image)
+
+    x1, y1, x2, y2 = bb.getAbsoluteBoundingBox(BBFormat.XYX2Y2)
+    
+    add_bbox_to_image(image, x1, y1, x2, y2, color=color, thickness=thickness, label=label)
+
+    if save_image:
+        cv2.imwrite(save_image, image)
+
     return image

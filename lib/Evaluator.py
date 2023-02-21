@@ -18,13 +18,15 @@ import numpy as np
 from BoundingBox import *
 from BoundingBoxes import *
 from utils import *
+import json
 
 
 class Evaluator:
     def GetPascalVOCMetrics(self,
                             boundingboxes,
                             IOUThreshold=0.5,
-                            method=MethodAveragePrecision.EveryPointInterpolation):
+                            method=MethodAveragePrecision.EveryPointInterpolation,
+                            save_path=None):
         """Get the metrics used by the VOC Pascal 2012 challenge.
         Get
         Args:
@@ -55,7 +57,10 @@ class Evaluator:
         # List with all detections (Ex: [imageName,class,confidence,(bb coordinates XYX2Y2)])
         detections = []
         # Get all classes
+
         classes = []
+        # store tp for each predictions
+
         # Loop through all bounding boxes and separate them into GTs and detections
         for bb in boundingboxes.getBoundingBoxes():
             # [imageName, class, confidence, (bb coordinates XYX2Y2)]
@@ -70,7 +75,9 @@ class Evaluator:
                     bb.getImageName(),
                     bb.getClassId(),
                     bb.getConfidence(),
-                    bb.getAbsoluteBoundingBox(BBFormat.XYX2Y2)
+                    bb.getAbsoluteBoundingBox(BBFormat.XYX2Y2),
+                    len(detections),    # save the index 
+                    0,
                 ])
             # get class
             if bb.getClassId() not in classes:
@@ -114,16 +121,19 @@ class Evaluator:
                         jmax = j
                 # Assign detection as true positive/don't care/false positive
                 if iouMax >= IOUThreshold:
-                    if det[dects[d][0]][jmax] == 0:
-                        TP[d] = 1  # count as true positive
-                        det[dects[d][0]][jmax] = 1  # flag as already 'seen'
-                        # print("TP")
-                    else:
-                        FP[d] = 1  # count as false positive
-                        # print("FP")
+                    TP[d] = 1
+                    # if det[dects[d][0]][jmax] == 0:
+                    #     TP[d] = 1  # count as true positive
+                    #     det[dects[d][0]][jmax] = 1  # flag as already 'seen'
+                    #     # print("TP")
+                    # else:
+                    #     FP[d] = 1  # count as false positive
+                    #     # print("FP")
                 # - A detected "cat" is overlaped with a GT "cat" with IOU >= IOUThreshold.
+                    detections[dects[d][4]][5] = 1
                 else:
                     FP[d] = 1  # count as false positive
+                    detections[dects[d][4]][5] = 0
                     # print("FP")
                 thresholds[d] = dects[d][2]
             # compute precision, recall and average precision
@@ -159,6 +169,41 @@ class Evaluator:
                 'best_recall': rec[best_f1_i]
             }
             ret.append(r)
+
+        if save_path is not None:
+            # save each image and its ground truth and predictions
+            import json 
+            results_every_images = {}
+            # save all predictions and evaluation status for each bounding box prediction
+            for i in range(len(detections)):
+                d = detections[i]
+                if d[0] not in results_every_images:
+                    results_every_images[d[0]] = []
+                _x = {
+                    'image_name': d[0], 
+                    'type': 'pred', 
+                    'label': d[1],
+                    'confidence': d[2],
+                    'bbox': d[3],   # format = [left, top, right, bottom / x1y1x2y2]
+                    'tp': d[5], 
+                }
+                results_every_images[d[0]].append(_x)
+            # save all ground truth for each image
+            for i in range(len(groundTruths)):
+                d = groundTruths[i]
+                if d[0] not in results_every_images:
+                    results_every_images[d[0]] = []
+                _x = {
+                    'image_name': d[0], 
+                    'type': 'gt', 
+                    'label': d[1],
+                    'bbox': d[3],   # format = [left, top, right, bottom / x1y1x2y2]
+                }
+                results_every_images[d[0]].append(_x)
+
+            with open(os.path.join(save_path, 'bbox_results_for_each_image.json'), 'wt') as f:
+                json.dump(results_every_images, f)
+
         return ret
 
     def PlotPrecisionRecallCurve(self,
@@ -200,7 +245,7 @@ class Evaluator:
             dict['total TP']: total number of True Positive detections;
             dict['total FP']: total number of False Negative detections;
         """
-        results = self.GetPascalVOCMetrics(boundingBoxes, IOUThreshold, method)
+        results = self.GetPascalVOCMetrics(boundingBoxes, IOUThreshold, method, save_path=savePath)
         result = None
         # Each resut represents a class
         for result in results:
@@ -440,3 +485,56 @@ class Evaluator:
     @staticmethod
     def _getArea(box):
         return (box[2] - box[0] + 1) * (box[3] - box[1] + 1)
+
+def evaluate_with_all_boxes(all_bboxes, iouThreshold, savePath):
+    evaluator = Evaluator()
+    acc_AP = 0
+    validClasses = 0
+
+    # Plot Precision x Recall curve
+    detections = evaluator.PlotPrecisionRecallCurve(
+        all_bboxes,  # Object containing all bounding boxes (ground truths and detections)
+        IOUThreshold=iouThreshold,  # IOU threshold
+        method=MethodAveragePrecision.EveryPointInterpolation,
+        # method=MethodAveragePrecision.ElevenPointInterpolation,
+        showAP=True,  # Show Average Precision in the title of the plot
+        showInterpolatedPrecision=False,  # Don't plot the interpolated precision curve
+        savePath=savePath,
+        showGraphic=True)
+
+    result_summary_json = {
+        'metrics_per_class': [],
+    }
+
+    # each detection is a class
+    for metricsPerClass in detections:
+        mpc = metricsPerClass.copy()
+
+        mpc['precision_last'] = mpc['precision'][-1]
+        mpc['recall_last'] = mpc['recall'][-1]
+
+        del mpc['precision']
+        del mpc['recall']
+        del mpc['interpolated precision']
+        del mpc['interpolated recall']
+        del mpc['thresholds']
+        del mpc['f1']
+
+        result_summary_json['metrics_per_class'].append(mpc)
+
+        ap = metricsPerClass['AP']
+
+        totalPositives = metricsPerClass['total positives']
+
+        if totalPositives > 0:
+            validClasses = validClasses + 1
+            acc_AP = acc_AP + ap
+
+    mAP = acc_AP / validClasses
+
+    result_summary_json['mAP'] = mAP
+
+    print(result_summary_json)
+    with open(os.path.join(savePath, 'result-summary.json'), 'wt') as f:
+        json.dump(result_summary_json, f, indent=1)
+

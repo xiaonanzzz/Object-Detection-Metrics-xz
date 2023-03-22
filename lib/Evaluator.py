@@ -19,6 +19,7 @@ from BoundingBox import *
 from BoundingBoxes import *
 from utils import *
 import json
+import pandas as pd
 
 
 class Evaluator:
@@ -204,6 +205,23 @@ class Evaluator:
             with open(os.path.join(save_path, 'bbox_results_for_each_image.json'), 'wt') as f:
                 json.dump(results_every_images, f)
 
+            if len(results_every_images) > 0:
+                with open(os.path.join(save_path, 'bbox_results_for_each_image_format.json'), 'wt') as f:
+                    json.dump(next(iter(results_every_images.items())), f, indent=1)
+            
+            # save all thresholds, precision and recall
+            df_thpr = []
+            for th, p, r in zip(thresholds, prec, rec):
+                df_thpr.append([th, p, r])
+            
+            df_thpr = pd.DataFrame(df_thpr, columns=['threshold', 'precision', 'recall'])
+            df_thpr = df_thpr.sort_values('threshold')
+            df_thpr.to_csv(os.path.join(save_path, 'pr-thresholding.csv'), index=False)
+            # save a simplified version
+            df_thpr['threshold'] = df_thpr['threshold'].apply(lambda x: round(x, 2))
+            df_thpr = df_thpr.drop_duplicates('threshold')
+            df_thpr.to_csv(os.path.join(save_path, 'pr-thresholding-simple.csv'), index=False)
+
         return ret
 
     def PlotPrecisionRecallCurve(self,
@@ -343,6 +361,10 @@ class Evaluator:
             #                 bbox=box)
             if savePath is not None:
                 plt.savefig(os.path.join(savePath, str(classId) + '.png'))
+
+                # save all thresholding and precision and recall
+                
+
             if showGraphic is True:
                 plt.show()
                 # plt.waitforbuttonpress()
